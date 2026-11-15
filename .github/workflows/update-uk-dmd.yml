@@ -1,0 +1,49 @@
+name: Update NHS dm+d catalogue
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 02:30 UTC is within the TRUD recommended midnight–06:00 UK maintenance window.
+    - cron: "30 2 * * 1"
+
+permissions:
+  contents: write
+
+jobs:
+  update-catalogue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fetch and convert latest NHSBSA dm+d release
+        env:
+          TRUD_API_KEY: ${{ secrets.TRUD_API_KEY }}
+          TRUD_ITEM_ID: "24"
+        run: python scripts/update_uk_dmd.py
+
+      - name: Publish latest catalogue to the public data branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/dmd-catalogue
+          cd /tmp/dmd-catalogue
+          git init
+          git checkout --orphan catalog-data
+          mkdir -p uk
+          cp "$GITHUB_WORKSPACE/build/uk/medicine_catalog_uk.json.gz" uk/
+          cp "$GITHUB_WORKSPACE/build/uk/manifest.json" uk/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add uk/medicine_catalog_uk.json.gz uk/manifest.json
+          git commit -m "Publish latest NHS dm+d catalogue"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${REPOSITORY}.git"
+          git push --force origin HEAD:catalog-data

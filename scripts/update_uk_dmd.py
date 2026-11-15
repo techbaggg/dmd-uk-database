@@ -54,19 +54,29 @@ TABLE_NAMES = list(TABLE_SPECS) + ["lookup_" + x.lower() for x in LOOKUP_TABLES]
 
 def http_json(url):
     req = urllib.request.Request(url, headers={"User-Agent": "DrGenZ-dm-d-updater/1.0"})
-    with urllib.request.urlopen(req, timeout=60) as response:
-        return json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=60) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except Exception as exc:
+        # Do not echo the request URL: it contains the private TRUD API key.
+        status = getattr(exc, "code", "network error")
+        raise RuntimeError("TRUD release-list request failed (" + str(status) + "). Check the private API secret and item subscription.") from None
 
 def download(url, destination):
     req = urllib.request.Request(url, headers={"User-Agent": "DrGenZ-dm-d-updater/1.0"})
     digest = hashlib.sha256()
-    with urllib.request.urlopen(req, timeout=180) as response, open(destination, "wb") as out:
-        while True:
-            block = response.read(1024 * 1024)
-            if not block:
-                break
-            digest.update(block)
-            out.write(block)
+    try:
+        with urllib.request.urlopen(req, timeout=180) as response, open(destination, "wb") as out:
+            while True:
+                block = response.read(1024 * 1024)
+                if not block:
+                    break
+                digest.update(block)
+                out.write(block)
+    except Exception as exc:
+        # The signed download URL also contains the private API key.
+        status = getattr(exc, "code", "network error")
+        raise RuntimeError("TRUD release download failed (" + str(status) + ").") from None
     return digest.hexdigest()
 
 def element_value(elem):
